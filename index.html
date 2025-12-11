@@ -813,3 +813,1137 @@
             </div>
         </div>
     </div>
+ <!-- ============================================
+         JAVASCRIPT - Core Algorithms & UI Logic
+         ============================================ -->
+    <script>
+        // =============================================
+        // GLOBAL STATE
+        // =============================================
+        let systemState = {
+            processes: 3,
+            resources: 3,
+            allocation: [[0,1,0], [2,0,0], [3,0,2]],
+            max: [[7,5,3], [3,2,2], [9,0,2]],
+            available: [3,3,2]
+        };
+
+        let predictionResult = null;
+        let detectionResult = null;
+        let resolutionResult = null;
+
+        // =============================================
+        // PRESET SCENARIOS
+        // =============================================
+        const presetScenarios = {
+            safe: {
+                processes: 3,
+                resources: 3,
+                allocation: [[0,1,0], [2,0,0], [3,0,2]],
+                max: [[7,5,3], [3,2,2], [9,0,2]],
+                available: [3,3,2]
+            },
+            unsafe: {
+                processes: 4,
+                resources: 3,
+                allocation: [[0,1,0], [2,0,0], [3,0,2], [2,1,1]],
+                max: [[7,5,3], [3,2,2], [9,0,2], [4,2,2]],
+                available: [0,1,0]
+            },
+            deadlock: {
+                processes: 4,
+                resources: 2,
+                allocation: [[1,0], [0,1], [1,0], [0,1]],
+                max: [[1,1], [1,1], [1,1], [1,1]],
+                available: [0,0]
+            },
+            highContention: {
+                processes: 5,
+                resources: 3,
+                allocation: [[2,0,1], [1,1,0], [1,0,2], [0,2,0], [1,1,1]],
+                max: [[4,2,2], [3,3,1], [2,1,4], [2,4,1], [3,3,3]],
+                available: [1,0,1]
+            }
+        };
+
+        // =============================================
+        // CORE ALGORITHMS
+        // =============================================
+
+        /**
+         * Calculate Need Matrix (Max - Allocation)
+         */
+        function calculateNeedMatrix(allocation, max) {
+            return max.map((row, i) =>
+                row.map((val, j) => val - allocation[i][j])
+            );
+        }
+
+        /**
+         * Analyze system state
+         */
+        function analyzeScenario(state) {
+            const { allocation, available, processes, resources } = state;
+            const needMatrix = calculateNeedMatrix(allocation, state.max);
+           
+            // Calculate total allocated per resource
+            const totalAllocated = Array(resources).fill(0);
+            for (let i = 0; i < processes; i++) {
+                for (let j = 0; j < resources; j++) {
+                    totalAllocated[j] += allocation[i][j];
+                }
+            }
+           
+            // Calculate total resources
+            const totalResources = available.map((avail, j) => avail + totalAllocated[j]);
+           
+            // Calculate utilization percentage
+            const utilizationPercentage = totalResources.map((total, j) =>
+                total > 0 ? (totalAllocated[j] / total) * 100 : 0
+            );
+           
+            return {
+                needMatrix,
+                totalAllocated,
+                totalResources,
+                utilizationPercentage
+            };
+        }
+
+        /**
+         * Banker's Algorithm - Safety Check
+         */
+        function bankersSafetyCheck(state) {
+            const { allocation, max, available, processes, resources } = state;
+            const need = calculateNeedMatrix(allocation, max);
+           
+            const work = [...available];
+            const finish = Array(processes).fill(false);
+            const sequence = [];
+           
+            let found = true;
+            while (found && sequence.length < processes) {
+                found = false;
+               
+                for (let i = 0; i < processes; i++) {
+                    if (!finish[i]) {
+                        let canFinish = true;
+                        for (let j = 0; j < resources; j++) {
+                            if (need[i][j] > work[j]) {
+                                canFinish = false;
+                                break;
+                            }
+                        }
+                       
+                        if (canFinish) {
+                            for (let j = 0; j < resources; j++) {
+                                work[j] += allocation[i][j];
+                            }
+                            finish[i] = true;
+                            sequence.push(i);
+                            found = true;
+                        }
+                    }
+                }
+            }
+           
+            const allFinished = finish.every(f => f);
+            return {
+                safe: allFinished,
+                sequence: allFinished ? sequence : null
+            };
+        }
+
+        /**
+         * Build Wait-For Graph
+         */
+        function buildWaitForGraph(state) {
+            const { allocation, max, available, processes, resources } = state;
+            const need = calculateNeedMatrix(allocation, max);
+           
+            const nodes = Array.from({ length: processes }, (_, i) => ({
+                id: i,
+                label: `P${i}`,
+                inCycle: false
+            }));
+           
+            const edges = [];
+           
+            for (let i = 0; i < processes; i++) {
+                for (let j = 0; j < resources; j++) {
+                    if (need[i][j] > 0 && available[j] < need[i][j]) {
+                        for (let k = 0; k < processes; k++) {
+                            if (k !== i && allocation[k][j] > 0) {
+                                const edgeExists = edges.some(e => e.from === i && e.to === k);
+                                if (!edgeExists) {
+                                    edges.push({ from: i, to: k, resource: j });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+           
+            return { nodes, edges };
+        }
+
+        /**
+         * DFS-based Cycle Detection
+         */
+        function detectCycles(graph) {
+            const n = graph.nodes.length;
+            const adj = Array.from({ length: n }, () => []);
+           
+            for (const edge of graph.edges) {
+                adj[edge.from].push(edge.to);
+            }
+           
+            const cycles = [];
+            const visited = new Set();
+            const recStack = new Set();
+            const path = [];
+           
+            function dfs(node) {
+                visited.add(node);
+                recStack.add(node);
+                path.push(node);
+               
+                for (const neighbor of adj[node]) {
+                    if (!visited.has(neighbor)) {
+                        dfs(neighbor);
+                    } else if (recStack.has(neighbor)) {
+                        const cycleStart = path.indexOf(neighbor);
+                        if (cycleStart !== -1) {
+                            const cycle = path.slice(cycleStart);
+                            const cycleKey = [...cycle].sort().join(',');
+                            const isUnique = !cycles.some(c => [...c].sort().join(',') === cycleKey);
+                            if (isUnique && cycle.length > 1) {
+                                cycles.push([...cycle]);
+                            }
+                        }
+                    }
+                }
+               
+                path.pop();
+                recStack.delete(node);
+            }
+           
+            for (let i = 0; i < n; i++) {
+                if (!visited.has(i)) {
+                    dfs(i);
+                }
+            }
+           
+            // Check for simple two-node cycles
+            for (let i = 0; i < n; i++) {
+                for (const j of adj[i]) {
+                    if (adj[j] && adj[j].includes(i)) {
+                        const cycle = [i, j];
+                        const cycleKey = [...cycle].sort().join(',');
+                        const isUnique = !cycles.some(c => [...c].sort().join(',') === cycleKey);
+                        if (isUnique) {
+                            cycles.push(cycle);
+                        }
+                    }
+                }
+            }
+           
+            return cycles;
+        }
+
+        /**
+         * Detect Deadlock
+         */
+        function detectDeadlock(state) {
+            const wfg = buildWaitForGraph(state);
+            const cycles = detectCycles(wfg);
+            const bankers = bankersSafetyCheck(state);
+           
+            // Mark nodes in cycles
+            const nodesInCycles = new Set();
+            cycles.forEach(cycle => cycle.forEach(node => nodesInCycles.add(node)));
+            wfg.nodes.forEach(node => {
+                node.inCycle = nodesInCycles.has(node.id);
+            });
+           
+            const isDeadlocked = cycles.length > 0;
+           
+            let explanation = '';
+            if (isDeadlocked) {
+                explanation = `Deadlock detected! ${cycles.length} cycle(s) found. `;
+                explanation += `Processes involved: ${[...nodesInCycles].map(p => `P${p}`).join(', ')}.`;
+            } else if (!bankers.safe) {
+                explanation = 'System is UNSAFE according to Banker\'s algorithm. No deadlock yet, but deadlock is possible.';
+            } else {
+                explanation = `System is SAFE. Safe sequence: ${bankers.sequence?.map(p => `P${p}`).join(' → ') || 'N/A'}`;
+            }
+           
+            return {
+                isDeadlocked,
+                isSafe: bankers.safe,
+                cyclePaths: cycles,
+                waitForGraph: wfg,
+                safeSequence: bankers.sequence,
+                explanation
+            };
+        }
+
+        /**
+         * Find longest path in WFG
+         */
+        function findLongestPath(graph) {
+            const n = graph.nodes.length;
+            const adj = Array.from({ length: n }, () => []);
+           
+            for (const edge of graph.edges) {
+                adj[edge.from].push(edge.to);
+            }
+           
+            let maxLength = 0;
+            const visited = new Set();
+           
+            function dfs(node, length) {
+                if (visited.has(node)) return length;
+                visited.add(node);
+               
+                let max = length;
+                for (const neighbor of adj[node]) {
+                    max = Math.max(max, dfs(neighbor, length + 1));
+                }
+               
+                visited.delete(node);
+                return max;
+            }
+           
+            for (let i = 0; i < n; i++) {
+                maxLength = Math.max(maxLength, dfs(i, 1));
+            }
+           
+            return maxLength;
+        }
+
+        /**
+         * Predict Deadlock
+         */
+        function predictDeadlock(state) {
+            const { allocation, max, available, processes, resources } = state;
+            const analysis = analyzeScenario(state);
+            const detection = detectDeadlock(state);
+            const wfg = detection.waitForGraph;
+           
+            const features = [];
+           
+            // 1. Resource utilization
+            const avgUtilization = analysis.utilizationPercentage.reduce((a, b) => a + b, 0) / resources;
+            const utilizationRisk = Math.min(avgUtilization / 100, 1);
+            features.push({
+                feature: 'Resource Utilization',
+                contribution: utilizationRisk * 25,
+                description: `Average utilization is ${avgUtilization.toFixed(1)}%`
+            });
+           
+            // 2. Resources near exhaustion
+            let exhaustedCount = 0;
+            for (let j = 0; j < resources; j++) {
+                if (analysis.totalResources[j] > 0) {
+                    const availablePercent = (available[j] / analysis.totalResources[j]) * 100;
+                    if (availablePercent < 20) exhaustedCount++;
+                }
+            }
+            const exhaustionRisk = exhaustedCount / resources;
+            features.push({
+                feature: 'Resource Exhaustion',
+                contribution: exhaustionRisk * 20,
+                description: `${exhaustedCount} of ${resources} resources near exhaustion`
+            });
+           
+            // 3. Wait chain length
+            const maxChainLength = findLongestPath(wfg);
+            const chainRisk = Math.min(maxChainLength / processes, 1);
+            features.push({
+                feature: 'Wait Chain Length',
+                contribution: chainRisk * 20,
+                description: `Longest wait chain: ${maxChainLength} processes`
+            });
+           
+            // 4. Multi-resource requests
+            let multiResourceProcesses = 0;
+            for (let i = 0; i < processes; i++) {
+                let resourcesNeeded = 0;
+                for (let j = 0; j < resources; j++) {
+                    if (analysis.needMatrix[i][j] > 0) resourcesNeeded++;
+                }
+                if (resourcesNeeded > 1) multiResourceProcesses++;
+            }
+            const multiResourceRisk = multiResourceProcesses / processes;
+            features.push({
+                feature: 'Multi-Resource Requests',
+                contribution: multiResourceRisk * 15,
+                description: `${multiResourceProcesses} processes need multiple resources`
+            });
+           
+            // 5. Safety state
+            const safetyRisk = detection.isSafe ? 0 : 0.8;
+            features.push({
+                feature: 'Safety State',
+                contribution: safetyRisk * 15,
+                description: detection.isSafe ? 'System is safe' : 'System is UNSAFE!'
+            });
+           
+            // 6. Existing cycles
+            const cycleRisk = detection.isDeadlocked ? 1 : 0;
+            features.push({
+                feature: 'Existing Cycles',
+                contribution: cycleRisk * 5,
+                description: detection.isDeadlocked ? `${detection.cyclePaths.length} cycle(s) found!` : 'No cycles'
+            });
+           
+            // Calculate probability
+            let probability = features.reduce((sum, f) => sum + f.contribution, 0);
+           
+            if (detection.isDeadlocked) {
+                probability = Math.max(probability, 95);
+            } else if (!detection.isSafe) {
+                probability = Math.max(probability, 60);
+            }
+           
+            probability = Math.min(probability, 100);
+           
+            // Risk label
+            let riskLabel;
+            if (probability < 25) riskLabel = 'Low';
+            else if (probability < 50) riskLabel = 'Medium';
+            else if (probability < 75) riskLabel = 'High';
+            else riskLabel = 'Critical';
+           
+            // Summary
+            let summary;
+            if (detection.isDeadlocked) {
+                summary = `CRITICAL: Active deadlock with ${detection.cyclePaths.length} cycle(s). Immediate action required.`;
+            } else if (riskLabel === 'Critical') {
+                summary = 'System at critical risk. Resource exhaustion and long wait chains detected.';
+            } else if (riskLabel === 'High') {
+                summary = 'High risk. System unsafe with resource competition.';
+            } else if (riskLabel === 'Medium') {
+                summary = 'Moderate risk. Some contention but recovery possible.';
+            } else {
+                summary = 'Low risk. System has adequate resources.';
+            }
+           
+            return {
+                probability,
+                riskLabel,
+                explainability: features,
+                summary
+            };
+        }
+
+        /**
+         * Suggest Resolution Strategies
+         */
+        function suggestResolution(state, detection) {
+            const recommendations = [];
+            const { allocation, max, processes, resources } = state;
+            const need = calculateNeedMatrix(allocation, max);
+           
+            if (!detection.isDeadlocked && detection.isSafe) {
+                return { recommendations: [], best: null };
+            }
+           
+            // Get problematic processes
+            const problematicProcesses = new Set();
+            detection.cyclePaths.forEach(cycle => cycle.forEach(p => problematicProcesses.add(p)));
+           
+            if (problematicProcesses.size === 0) {
+                detection.waitForGraph.edges.forEach(edge => {
+                    problematicProcesses.add(edge.to);
+                });
+            }
+           
+            if (problematicProcesses.size === 0) {
+                for (let i = 0; i < processes; i++) {
+                    if (allocation[i].some(a => a > 0)) {
+                        problematicProcesses.add(i);
+                    }
+                }
+            }
+           
+            for (const proc of problematicProcesses) {
+                const procAllocation = allocation[proc].reduce((a, b) => a + b, 0);
+                const procNeed = need[proc].reduce((a, b) => a + b, 0);
+               
+                // Rollback
+                if (procAllocation > 0) {
+                    recommendations.push({
+                        method: 'rollback',
+                        targetProcess: proc,
+                        explanation: `Roll back P${proc} to release ${procAllocation} resource units.`,
+                        estimatedCost: procAllocation * 10,
+                        workLost: procAllocation,
+                        processesAffected: 1,
+                        impact: procAllocation > 5 ? 'High' : procAllocation > 2 ? 'Medium' : 'Low'
+                    });
+                }
+               
+                // Preempt
+                for (let r = 0; r < resources; r++) {
+                    if (allocation[proc][r] > 0) {
+                        recommendations.push({
+                            method: 'preempt',
+                            targetProcess: proc,
+                            explanation: `Preempt R${r} (${allocation[proc][r]} units) from P${proc}.`,
+                            estimatedCost: allocation[proc][r] * 5,
+                            workLost: allocation[proc][r],
+                            processesAffected: 1,
+                            impact: allocation[proc][r] > 3 ? 'Medium' : 'Low'
+                        });
+                        break;
+                    }
+                }
+               
+                // Priority boost
+                if (procNeed < procAllocation) {
+                    recommendations.push({
+                        method: 'priority-boost',
+                        targetProcess: proc,
+                        explanation: `Boost P${proc} priority (needs only ${procNeed} more units).`,
+                        estimatedCost: 2,
+                        workLost: 0,
+                        processesAffected: processes,
+                        impact: 'Low'
+                    });
+                }
+            }
+           
+            // Throttle
+            recommendations.push({
+                method: 'throttle',
+                targetProcess: -1,
+                explanation: 'Temporarily block new resource requests.',
+                estimatedCost: 15,
+                workLost: 0,
+                processesAffected: processes,
+                impact: 'Medium'
+            });
+           
+            // Kill
+            if (detection.isDeadlocked && problematicProcesses.size > 0) {
+                let maxResources = 0;
+                let killTarget = 0;
+                for (const proc of problematicProcesses) {
+                    const total = allocation[proc].reduce((a, b) => a + b, 0);
+                    if (total > maxResources) {
+                        maxResources = total;
+                        killTarget = proc;
+                    }
+                }
+               
+                recommendations.push({
+                    method: 'kill',
+                    targetProcess: killTarget,
+                    explanation: `Terminate P${killTarget} to release ${maxResources} resource units.`,
+                    estimatedCost: maxResources * 20,
+                    workLost: maxResources,
+                    processesAffected: 1,
+                    impact: 'High'
+                });
+            }
+           
+            recommendations.sort((a, b) => a.estimatedCost - b.estimatedCost);
+           
+            return {
+                recommendations,
+                best: recommendations[0] || null
+            };
+        }
+
+        /**
+         * Apply Resolution
+         */
+        function applyResolution(state, resolution) {
+            const newState = {
+                ...state,
+                allocation: state.allocation.map(row => [...row]),
+                max: state.max.map(row => [...row]),
+                available: [...state.available]
+            };
+           
+            const proc = resolution.targetProcess;
+           
+            switch (resolution.method) {
+                case 'rollback':
+                case 'kill':
+                    if (proc >= 0) {
+                        for (let j = 0; j < state.resources; j++) {
+                            newState.available[j] += newState.allocation[proc][j];
+                            newState.allocation[proc][j] = 0;
+                        }
+                        if (resolution.method === 'kill') {
+                            for (let j = 0; j < state.resources; j++) {
+                                newState.max[proc][j] = 0;
+                            }
+                        }
+                    }
+                    break;
+                   
+                case 'preempt':
+                    if (proc >= 0) {
+                        for (let j = 0; j < state.resources; j++) {
+                            if (newState.allocation[proc][j] > 0) {
+                                newState.available[j] += newState.allocation[proc][j];
+                                newState.allocation[proc][j] = 0;
+                                break;
+                            }
+                        }
+                    }
+                    break;
+                   
+                case 'priority-boost':
+                    if (proc >= 0) {
+                        for (let j = 0; j < state.resources; j++) {
+                            newState.available[j] += newState.allocation[proc][j];
+                            newState.allocation[proc][j] = 0;
+                            newState.max[proc][j] = 0;
+                        }
+                    }
+                    break;
+                   
+                case 'throttle':
+                    for (let i = 0; i < state.processes; i++) {
+                        for (let j = 0; j < state.resources; j++) {
+                            if (newState.max[i][j] > newState.allocation[i][j] + 1) {
+                                newState.max[i][j] = newState.allocation[i][j] + 1;
+                            }
+                        }
+                    }
+                    break;
+            }
+           
+            return newState;
+        }
+
+        // =============================================
+        // UI FUNCTIONS
+        // =============================================
+
+        function showPage(pageId) {
+            // Hide all pages
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            // Show selected page
+            document.getElementById(`page-${pageId}`).classList.add('active');
+            // Update nav
+            document.querySelectorAll('.nav-links button').forEach(b => b.classList.remove('active'));
+            document.querySelector(`.nav-links button[onclick="showPage('${pageId}')"]`).classList.add('active');
+        }
+
+        function updateDimensions() {
+            const p = parseInt(document.getElementById('numProcesses').value);
+            const r = parseInt(document.getElementById('numResources').value);
+           
+            systemState.processes = p;
+            systemState.resources = r;
+           
+            // Resize matrices
+            systemState.allocation = Array.from({ length: p }, (_, i) =>
+                Array.from({ length: r }, (_, j) => systemState.allocation[i]?.[j] || 0)
+            );
+            systemState.max = Array.from({ length: p }, (_, i) =>
+                Array.from({ length: r }, (_, j) => systemState.max[i]?.[j] || 0)
+            );
+            systemState.available = Array.from({ length: r }, (_, j) =>
+                systemState.available[j] || 0
+            );
+           
+            renderMatrices();
+        }
+
+        function renderMatrices() {
+            const { processes, resources, allocation, max, available } = systemState;
+           
+            // Allocation Matrix
+            let allocationHTML = '<table class="matrix-table"><tr><th></th>';
+            for (let j = 0; j < resources; j++) allocationHTML += `<th>R${j}</th>`;
+            allocationHTML += '</tr>';
+            for (let i = 0; i < processes; i++) {
+                allocationHTML += `<tr><th>P${i}</th>`;
+                for (let j = 0; j < resources; j++) {
+                    allocationHTML += `<td><input type="number" min="0" value="${allocation[i][j]}" onchange="updateAllocation(${i},${j},this.value)"></td>`;
+                }
+                allocationHTML += '</tr>';
+            }
+            allocationHTML += '</table>';
+            document.getElementById('allocationMatrix').innerHTML = allocationHTML;
+           
+            // Max Matrix
+            let maxHTML = '<table class="matrix-table"><tr><th></th>';
+            for (let j = 0; j < resources; j++) maxHTML += `<th>R${j}</th>`;
+            maxHTML += '</tr>';
+            for (let i = 0; i < processes; i++) {
+                maxHTML += `<tr><th>P${i}</th>`;
+                for (let j = 0; j < resources; j++) {
+                    maxHTML += `<td><input type="number" min="0" value="${max[i][j]}" onchange="updateMax(${i},${j},this.value)"></td>`;
+                }
+                maxHTML += '</tr>';
+            }
+            maxHTML += '</table>';
+            document.getElementById('maxMatrix').innerHTML = maxHTML;
+           
+            // Available Vector
+            let availHTML = '<table class="matrix-table"><tr>';
+            for (let j = 0; j < resources; j++) availHTML += `<th>R${j}</th>`;
+            availHTML += '</tr><tr>';
+            for (let j = 0; j < resources; j++) {
+                availHTML += `<td><input type="number" min="0" value="${available[j]}" onchange="updateAvailable(${j},this.value)"></td>`;
+            }
+            availHTML += '</tr></table>';
+            document.getElementById('availableVector').innerHTML = availHTML;
+        }
+
+        function updateAllocation(i, j, val) {
+            systemState.allocation[i][j] = parseInt(val) || 0;
+        }
+
+        function updateMax(i, j, val) {
+            systemState.max[i][j] = parseInt(val) || 0;
+        }
+
+        function updateAvailable(j, val) {
+            systemState.available[j] = parseInt(val) || 0;
+        }
+
+        function loadPreset(key) {
+            const preset = presetScenarios[key];
+            systemState = JSON.parse(JSON.stringify(preset));
+            document.getElementById('numProcesses').value = preset.processes;
+            document.getElementById('numResources').value = preset.resources;
+            renderMatrices();
+           
+            // Clear results
+            predictionResult = null;
+            detectionResult = null;
+            resolutionResult = null;
+        }
+
+        function resetScenario() {
+            loadPreset('safe');
+        }
+
+        function runAnalysis() {
+            runPrediction();
+            runDetection();
+            runResolution();
+            showPage('prediction');
+        }
+
+        function runPrediction() {
+            predictionResult = predictDeadlock(systemState);
+            renderPrediction();
+        }
+
+        function runDetection() {
+            detectionResult = detectDeadlock(systemState);
+            renderDetection();
+        }
+
+        function runResolution() {
+            if (!detectionResult) {
+                detectionResult = detectDeadlock(systemState);
+            }
+            resolutionResult = suggestResolution(systemState, detectionResult);
+            renderResolution();
+        }
+
+        function renderPrediction() {
+            if (!predictionResult) {
+                document.getElementById('predictionResults').innerHTML = '<div class="text-center" style="padding:3rem;color:var(--text-muted);">Click "Run Prediction" to analyze</div>';
+                return;
+            }
+           
+            const { probability, riskLabel, explainability, summary } = predictionResult;
+            const riskClass = riskLabel.toLowerCase();
+           
+            let html = `
+                <div class="grid grid-2 gap-3">
+                    <div class="card">
+                        <div class="gauge-container">
+                            ${renderGauge(probability, riskLabel)}
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h3 class="card-title">Summary</h3>
+                        <p class="explanation">${summary}</p>
+                       
+                        <h4 class="mt-3 mb-2">Risk Factors</h4>
+                        ${explainability.map(f => `
+                            <div class="mb-2">
+                                <div class="flex justify-between mb-1">
+                                    <span>${f.feature}</span>
+                                    <span style="color:var(--neon-blue);">${f.contribution.toFixed(1)}%</span>
+                                </div>
+                                <div class="progress-bar">
+                                    <div class="progress-fill" style="width:${f.contribution}%;background:var(--neon-blue);"></div>
+                                </div>
+                                <small style="color:var(--text-muted);">${f.description}</small>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+                <div class="flex gap-2 mt-3">
+                    <button class="btn btn-primary" onclick="showPage('detection')">Continue to Detection →</button>
+                </div>
+            `;
+           
+            document.getElementById('predictionResults').innerHTML = html;
+        }
+
+        function renderGauge(value, riskLevel) {
+            const width = 200;
+            const height = 120;
+            const strokeWidth = 12;
+            const radius = (width - strokeWidth) / 2;
+            const circumference = Math.PI * radius;
+            const offset = circumference * (1 - value / 100);
+           
+            let color;
+            if (value < 25) color = 'var(--neon-green)';
+            else if (value < 50) color = 'var(--neon-amber)';
+            else if (value < 75) color = 'var(--neon-purple)';
+            else color = 'var(--neon-red)';
+           
+            return `
+                <svg width="${width}" height="${height + 30}" viewBox="0 0 ${width} ${height + 10}">
+                    <!-- Background arc -->
+                    <path
+                        d="M ${strokeWidth/2} ${height} A ${radius} ${radius} 0 0 1 ${width - strokeWidth/2} ${height}"
+                        fill="none"
+                        stroke="var(--border-color)"
+                        stroke-width="${strokeWidth}"
+                        stroke-linecap="round"
+                    />
+                    <!-- Value arc -->
+                    <path
+                        d="M ${strokeWidth/2} ${height} A ${radius} ${radius} 0 0 1 ${width - strokeWidth/2} ${height}"
+                        fill="none"
+                        stroke="${color}"
+                        stroke-width="${strokeWidth}"
+                        stroke-linecap="round"
+                        stroke-dasharray="${circumference}"
+                        stroke-dashoffset="${offset}"
+                        style="filter: drop-shadow(0 0 8px ${color});"
+                    />
+                    <!-- Value text -->
+                    <text x="${width/2}" y="${height - 10}" text-anchor="middle" fill="${color}" font-family="var(--font-mono)" font-size="28" font-weight="bold">
+                        ${value.toFixed(0)}%
+                    </text>
+                </svg>
+                <div class="gauge-label">Deadlock Probability</div>
+                <div class="risk-${riskLevel.toLowerCase()}" style="font-weight:bold;font-size:1.2rem;">${riskLevel}</div>
+            `;
+        }
+
+        function renderDetection() {
+            if (!detectionResult) {
+                document.getElementById('detectionResults').innerHTML = '<div class="text-center" style="padding:3rem;color:var(--text-muted);">Click "Run Detection" to analyze</div>';
+                return;
+            }
+           
+            const { isDeadlocked, isSafe, cyclePaths, waitForGraph, safeSequence, explanation } = detectionResult;
+           
+            let html = `
+                <!-- Status Cards -->
+                <div class="status-grid">
+                    <div class="status-card ${isDeadlocked ? 'danger' : 'success'}">
+                        <div style="font-size:2rem;">${isDeadlocked ? '🔴' : '🟢'}</div>
+                        <div style="font-weight:bold;">${isDeadlocked ? 'DEADLOCK' : 'NO DEADLOCK'}</div>
+                    </div>
+                    <div class="status-card ${isSafe ? 'success' : 'warning'}">
+                        <div style="font-size:2rem;">${isSafe ? '✓' : '⚠'}</div>
+                        <div style="font-weight:bold;">${isSafe ? 'SAFE' : 'UNSAFE'}</div>
+                    </div>
+                    <div class="status-card info">
+                        <div style="font-size:2rem;">${cyclePaths.length}</div>
+                        <div style="font-weight:bold;">CYCLES</div>
+                    </div>
+                </div>
+               
+                <!-- Wait-For Graph -->
+                <div class="card">
+                    <h3 class="card-title mb-2">Wait-For Graph</h3>
+                    <div class="graph-container">
+                        ${renderWaitForGraph(waitForGraph, cyclePaths)}
+                        <div class="graph-legend">
+                            <div class="legend-item">
+                                <div class="legend-dot" style="background:var(--neon-blue);"></div>
+                                <span>Process</span>
+                            </div>
+                            <div class="legend-item">
+                                <div style="width:20px;height:2px;background:var(--neon-blue);"></div>
+                                <span>Waits for</span>
+                            </div>
+                            ${cyclePaths.length > 0 ? `
+                                <div class="legend-item">
+                                    <div class="legend-dot animate-pulse" style="background:var(--neon-red);"></div>
+                                    <span style="color:var(--neon-red);">In Cycle</span>
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+               
+                <!-- Results -->
+                <div class="grid grid-2 mt-2">
+                    ${isSafe && safeSequence ? `
+                        <div class="card">
+                            <h3 class="card-title" style="color:var(--neon-green);">✓ Safe Sequence</h3>
+                            <div class="sequence-box mt-2">
+                                ${safeSequence.map((p, i) => `
+                                    <span class="sequence-item">P${p}</span>
+                                    ${i < safeSequence.length - 1 ? '<span class="sequence-arrow">→</span>' : ''}
+                                `).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
+                   
+                    ${cyclePaths.length > 0 ? `
+                        <div class="card">
+                            <h3 class="card-title" style="color:var(--neon-red);">✕ Detected Cycles</h3>
+                            ${cyclePaths.map((cycle, i) => `
+                                <div class="cycle-box mt-2">
+                                    Cycle ${i + 1}: ${cycle.map(p => `P${p}`).join(' → ')} → P${cycle[0]}
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : ''}
+                </div>
+               
+                <!-- Explanation -->
+                <div class="explanation mt-2">
+                    <strong>Analysis:</strong> ${explanation}
+                </div>
+               
+                <div class="flex gap-2 mt-3">
+                    <button class="btn btn-primary" onclick="showPage('resolution')">Continue to Resolution →</button>
+                </div>
+            `;
+           
+            document.getElementById('detectionResults').innerHTML = html;
+        }
+
+        function renderWaitForGraph(graph, cyclePaths) {
+            const width = 500;
+            const height = 350;
+            const centerX = width / 2;
+            const centerY = height / 2;
+            const radius = 130;
+           
+            if (graph.nodes.length === 0) {
+                return '<p style="text-align:center;color:var(--text-muted);padding:3rem;">No processes</p>';
+            }
+           
+            // Calculate positions
+            const positions = {};
+            graph.nodes.forEach((node, i) => {
+                const angle = (2 * Math.PI * i) / graph.nodes.length - Math.PI / 2;
+                positions[node.id] = {
+                    x: centerX + radius * Math.cos(angle),
+                    y: centerY + radius * Math.sin(angle)
+                };
+            });
+           
+            // Check if edge is in cycle
+            function isEdgeInCycle(from, to) {
+                return cyclePaths.some(cycle => {
+                    for (let i = 0; i < cycle.length; i++) {
+                        const next = (i + 1) % cycle.length;
+                        if (cycle[i] === from && cycle[next] === to) return true;
+                    }
+                    return false;
+                });
+            }
+           
+            let svg = `<svg width="100%" height="100%" viewBox="0 0 ${width} ${height}">`;
+           
+            // Arrow markers
+            svg += `
+                <defs>
+                    <marker id="arrow-normal" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+                        <path d="M0,0 L0,6 L9,3 z" fill="var(--neon-blue)" />
+                    </marker>
+                    <marker id="arrow-cycle" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+                        <path d="M0,0 L0,6 L9,3 z" fill="var(--neon-red)" />
+                    </marker>
+                </defs>
+            `;
+           
+            // Edges
+            graph.edges.forEach(edge => {
+                const from = positions[edge.from];
+                const to = positions[edge.to];
+                if (!from || !to) return;
+               
+                const inCycle = isEdgeInCycle(edge.from, edge.to);
+                const color = inCycle ? 'var(--neon-red)' : 'var(--neon-blue)';
+                const marker = inCycle ? 'url(#arrow-cycle)' : 'url(#arrow-normal)';
+               
+                // Calculate direction
+                const dx = to.x - from.x;
+                const dy = to.y - from.y;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                const nodeRadius = 24;
+               
+                const startX = from.x + (nodeRadius * dx) / dist;
+                const startY = from.y + (nodeRadius * dy) / dist;
+                const endX = to.x - (nodeRadius * dx) / dist;
+                const endY = to.y - (nodeRadius * dy) / dist;
+               
+                // Curved path
+                const midX = (startX + endX) / 2;
+                const midY = (startY + endY) / 2;
+                const offset = dist * 0.15;
+                const perpX = -(endY - startY) / dist * offset;
+                const perpY = (endX - startX) / dist * offset;
+               
+                svg += `<path d="M ${startX} ${startY} Q ${midX + perpX} ${midY + perpY} ${endX} ${endY}"
+                         fill="none" stroke="${color}" stroke-width="${inCycle ? 3 : 2}"
+                         marker-end="${marker}" ${inCycle ? 'class="animate-pulse"' : ''}/>`;
+               
+                // Resource label
+                if (edge.resource !== undefined) {
+                    svg += `<text x="${midX + perpX + 10}" y="${midY + perpY - 5}"
+                             fill="var(--text-muted)" font-size="10" font-family="var(--font-mono)">R${edge.resource}</text>`;
+                }
+            });
+           
+            // Nodes
+            graph.nodes.forEach(node => {
+                const pos = positions[node.id];
+                const inCycle = node.inCycle;
+                const color = inCycle ? 'var(--neon-red)' : 'var(--neon-blue)';
+               
+                svg += `<g transform="translate(${pos.x}, ${pos.y})" ${inCycle ? 'class="animate-pulse"' : ''}>`;
+                svg += `<circle r="32" fill="${inCycle ? 'rgba(255,0,77,0.2)' : 'rgba(0,224,255,0.2)'}" />`;
+                svg += `<circle r="24" fill="var(--bg-card)" stroke="${color}" stroke-width="2" />`;
+                svg += `<text text-anchor="middle" dominant-baseline="central" fill="${color}" font-family="var(--font-mono)" font-weight="bold" font-size="14">${node.label}</text>`;
+                svg += `</g>`;
+            });
+           
+            svg += '</svg>';
+            return svg;
+        }
+
+        function renderResolution() {
+            if (!resolutionResult || resolutionResult.recommendations.length === 0) {
+                if (detectionResult && detectionResult.isSafe && !detectionResult.isDeadlocked) {
+                    document.getElementById('resolutionResults').innerHTML = `
+                        <div class="text-center" style="padding:3rem;">
+                            <div style="font-size:4rem;margin-bottom:1rem;">✓</div>
+                            <h3 style="color:var(--neon-green);">System is Healthy</h3>
+                            <p style="color:var(--text-muted);">No resolution needed. The system is in a safe state.</p>
+                        </div>
+                    `;
+                } else {
+                    document.getElementById('resolutionResults').innerHTML = '<div class="text-center" style="padding:3rem;color:var(--text-muted);">Click "Generate Suggestions" to get recommendations</div>';
+                }
+                return;
+            }
+           
+            const { recommendations, best } = resolutionResult;
+           
+            const methodIcons = {
+                'rollback': '↩',
+                'preempt': '⚡',
+                'priority-boost': '⬆',
+                'throttle': '⏸',
+                'kill': '✕'
+            };
+           
+            const impactColors = {
+                'Low': 'var(--neon-green)',
+                'Medium': 'var(--neon-amber)',
+                'High': 'var(--neon-red)'
+            };
+           
+            let html = `
+                ${best ? `
+                    <div class="card mb-3" style="border-color:var(--neon-green);">
+                        <div class="flex items-center gap-2 mb-2">
+                            <span style="color:var(--neon-green);font-size:1.5rem;">★</span>
+                            <h3 style="color:var(--neon-green);">Recommended Action</h3>
+                        </div>
+                        <p><strong>${methodIcons[best.method]} ${best.method.toUpperCase()}</strong> ${best.targetProcess >= 0 ? `(P${best.targetProcess})` : ''}</p>
+                        <p style="color:var(--text-secondary);">${best.explanation}</p>
+                        <button class="btn btn-success mt-2" onclick="applyRecommendation(0)">Apply This Resolution</button>
+                    </div>
+                ` : ''}
+               
+                <h3 class="mb-2">All Recommendations</h3>
+                ${recommendations.map((r, i) => `
+                    <div class="recommendation">
+                        <div class="recommendation-header">
+                            <span class="recommendation-method" style="color:${impactColors[r.impact]};">
+                                ${methodIcons[r.method]} ${r.method.replace('-', ' ')}
+                            </span>
+                            <span class="badge" style="color:${impactColors[r.impact]};border:1px solid ${impactColors[r.impact]};">
+                                ${r.impact} Impact
+                            </span>
+                        </div>
+                        <p>${r.explanation}</p>
+                        <div class="flex gap-2 mt-2" style="font-size:0.85rem;color:var(--text-muted);">
+                            <span>Cost: ${r.estimatedCost}</span>
+                            <span>•</span>
+                            <span>Work Lost: ${r.workLost}</span>
+                            <span>•</span>
+                            <span>Affected: ${r.processesAffected} process(es)</span>
+                        </div>
+                        <button class="btn btn-secondary mt-2" onclick="applyRecommendation(${i})">Apply</button>
+                    </div>
+                `).join('')}
+               
+                <div class="flex gap-2 mt-3">
+                    <button class="btn btn-secondary" onclick="exportReport()">📄 Export Report</button>
+                </div>
+            `;
+           
+            document.getElementById('resolutionResults').innerHTML = html;
+        }
+
+        function applyRecommendation(index) {
+            const resolution = resolutionResult.recommendations[index];
+            systemState = applyResolution(systemState, resolution);
+           
+            // Re-run analysis
+            renderMatrices();
+            runPrediction();
+            runDetection();
+            runResolution();
+           
+            alert(`Applied: ${resolution.method.toUpperCase()} on P${resolution.targetProcess >= 0 ? resolution.targetProcess : 'all'}`);
+        }
+
+        function exportReport() {
+            const report = {
+                timestamp: new Date().toISOString(),
+                systemState: systemState,
+                prediction: predictionResult,
+                detection: detectionResult,
+                resolution: resolutionResult
+            };
+           
+            const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `deadlock-report-${Date.now()}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // =============================================
+        // INITIALIZATION
+        // =============================================
+        document.addEventListener('DOMContentLoaded', () => {
+            renderMatrices();
+        });
+    </script>
+</body>
+</html>
