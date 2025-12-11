@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deadlock Detection & Prediction System</title>
+    <meta name="description" content="AI-Powered Deadlock Detection using Banker's Algorithm, Wait-For Graph, and Heuristic Prediction">
+    <style>
+        /* ============================================
+           CSS STYLES - Neon Cyber Theme
+           ============================================ */
+       
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            /* Colors */
+            --bg-primary: #0A0D14;
+            --bg-secondary: #12151C;
+            --bg-card: #161A23;
+            --border-color: #2A3142;
+           
+            --text-primary: #E8ECF4;
+            --text-secondary: #8A94A6;
+            --text-muted: #5A6478;
+           
+            --neon-blue: #00E0FF;
+            --neon-purple: #A050FF;
+            --neon-green: #00FF88;
+            --neon-amber: #FFB347;
+            --neon-red: #FF004D;
+           
+            /* Fonts */
+            --font-heading: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            --font-body: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            --font-mono: 'Courier New', Courier, monospace;
+        }
+
+        body {
+            font-family: var(--font-body);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+
+        /* Navigation */
+        .navbar {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: 1rem 2rem;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: var(--neon-blue);
+            text-shadow: 0 0 10px var(--neon-blue);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 1.5rem;
+        }
+
+        .nav-links button {
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            transition: all 0.3s;
+            font-size: 0.95rem;
+        }
+
+        .nav-links button:hover,
+        .nav-links button.active {
+            color: var(--neon-blue);
+            background: rgba(0, 224, 255, 0.1);
+        }
+
+        /* Main Container */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        /* Cards */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .card-header {
+            margin-bottom: 1rem;
+        }
+
+        .card-title {
+            font-size: 1.25rem;
+            color: var(--text-primary);
+            margin-bottom: 0.5rem;
+        }
+
+        .card-description {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        /* Grid Layout */
+        .grid {
+            display: grid;
+            gap: 1.5rem;
+        }
+
+        .grid-2 { grid-template-columns: repeat(2, 1fr); }
+        .grid-3 { grid-template-columns: repeat(3, 1fr); }
+        .grid-4 { grid-template-columns: repeat(4, 1fr); }
+
+        @media (max-width: 768px) {
+            .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+        }
+
+        /* Buttons */
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+            font-size: 0.95rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-primary {
+            background: var(--neon-blue);
+            color: var(--bg-primary);
+        }
+
+        .btn-primary:hover {
+            box-shadow: 0 0 20px var(--neon-blue);
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+        }
+
+        .btn-secondary:hover {
+            border-color: var(--neon-blue);
+            color: var(--neon-blue);
+        }
+
+        .btn-danger {
+            background: var(--neon-red);
+            color: white;
+        }
+
+        .btn-success {
+            background: var(--neon-green);
+            color: var(--bg-primary);
+        }
+
+        /* Input Fields */
+        input[type="number"],
+        input[type="text"],
+        select {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 0.5rem 0.75rem;
+            color: var(--text-primary);
+            font-family: var(--font-mono);
+            width: 100%;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: var(--neon-blue);
+            box-shadow: 0 0 10px rgba(0, 224, 255, 0.2);
+        }
+
+        /* Matrix Table */
+        .matrix-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-family: var(--font-mono);
+        }
+
+        .matrix-table th,
+        .matrix-table td {
+            border: 1px solid var(--border-color);
+            padding: 0.5rem;
+            text-align: center;
+        }
+
+        .matrix-table th {
+            background: var(--bg-secondary);
+            color: var(--neon-blue);
+            font-weight: 600;
+        }
+
+        .matrix-table input {
+            width: 60px;
+            text-align: center;
+        }
+
+        /* Gauge Component */
+        .gauge-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 1rem;
+        }
+
+        .gauge-svg {
+            filter: drop-shadow(0 0 10px currentColor);
+        }
+
+        .gauge-value {
+            font-family: var(--font-mono);
+            font-weight: bold;
+            font-size: 2rem;
+        }
+
+        .gauge-label {
+            color: var(--text-secondary);
+            margin-top: 0.5rem;
+        }
+
+        .risk-low { color: var(--neon-green); }
+        .risk-medium { color: var(--neon-amber); }
+        .risk-high { color: var(--neon-purple); }
+        .risk-critical { color: var(--neon-red); }
+
+        /* Wait-For Graph */
+        .graph-container {
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            padding: 1rem;
+            position: relative;
+            min-height: 400px;
+        }
+
+        .graph-legend {
+            position: absolute;
+            bottom: 1rem;
+            left: 1rem;
+            display: flex;
+            gap: 1.5rem;
+            font-size: 0.8rem;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .legend-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+
+        /* Status Badges */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .badge-success {
+            background: rgba(0, 255, 136, 0.1);
+            color: var(--neon-green);
+            border: 1px solid var(--neon-green);
+        }
+
+        .badge-danger {
+            background: rgba(255, 0, 77, 0.1);
+            color: var(--neon-red);
+            border: 1px solid var(--neon-red);
+        }
+
+        .badge-warning {
+            background: rgba(255, 179, 71, 0.1);
+            color: var(--neon-amber);
+            border: 1px solid var(--neon-amber);
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 0.5rem;
+        }
+
+        .tab-btn {
+            padding: 0.75rem 1.5rem;
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            border-radius: 8px 8px 0 0;
+            transition: all 0.3s;
+        }
+
+        .tab-btn:hover {
+            color: var(--text-primary);
+        }
+
+        .tab-btn.active {
+            background: var(--bg-card);
+            color: var(--neon-blue);
+            border-bottom: 2px solid var(--neon-blue);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Progress Bar */
+        .progress-bar {
+            height: 8px;
+            background: var(--bg-secondary);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.5s ease;
+        }
+
+        /* Presets */
+        .preset-card {
+            padding: 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .preset-card:hover {
+            border-color: var(--neon-blue);
+            transform: translateY(-2px);
+        }
+
+        .preset-card.selected {
+            border-color: var(--neon-blue);
+            background: rgba(0, 224, 255, 0.1);
+        }
+
+        /* Recommendation Cards */
+        .recommendation {
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .recommendation-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }
+
+        .recommendation-method {
+            font-weight: bold;
+            text-transform: uppercase;
+            font-size: 0.85rem;
+        }
+
+        /* Animations */
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        @keyframes glow {
+            0%, 100% { filter: drop-shadow(0 0 5px currentColor); }
+            50% { filter: drop-shadow(0 0 20px currentColor); }
+        }
+
+        .animate-pulse {
+            animation: pulse 2s infinite;
+        }
+
+        .animate-glow {
+            animation: glow 2s infinite;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-secondary);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--neon-blue);
+        }
+
+        /* Page sections */
+        .page {
+            display: none;
+        }
+
+        .page.active {
+            display: block;
+        }
+
+        .hero {
+            text-align: center;
+            padding: 4rem 2rem;
+        }
+
+        .hero h1 {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, var(--neon-blue), var(--neon-purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero p {
+            color: var(--text-secondary);
+            font-size: 1.2rem;
+            max-width: 600px;
+            margin: 0 auto 2rem;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-top: 3rem;
+        }
+
+        .feature-card {
+            text-align: center;
+            padding: 2rem;
+        }
+
+        .feature-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        .stat-card {
+            text-align: center;
+            padding: 1rem;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            font-family: var(--font-mono);
+            color: var(--neon-blue);
+        }
+
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        /* Explanation boxes */
+        .explanation {
+            background: var(--bg-secondary);
+            border-left: 3px solid var(--neon-blue);
+            padding: 1rem;
+            margin: 1rem 0;
+            border-radius: 0 8px 8px 0;
+        }
+
+        /* Status cards */
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .status-card {
+            text-align: center;
+            padding: 1.5rem;
+            border-radius: 12px;
+        }
+
+        .status-card.success { background: rgba(0, 255, 136, 0.1); border: 1px solid var(--neon-green); }
+        .status-card.danger { background: rgba(255, 0, 77, 0.1); border: 1px solid var(--neon-red); }
+        .status-card.warning { background: rgba(255, 179, 71, 0.1); border: 1px solid var(--neon-amber); }
+        .status-card.info { background: rgba(0, 224, 255, 0.1); border: 1px solid var(--neon-blue); }
+
+        .sequence-box {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .sequence-item {
+            background: var(--bg-secondary);
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            font-family: var(--font-mono);
+            border: 1px solid var(--neon-blue);
+            color: var(--neon-blue);
+        }
+
+        .sequence-arrow {
+            color: var(--text-muted);
+        }
+
+        .cycle-box {
+            background: rgba(255, 0, 77, 0.1);
+            border: 1px solid var(--neon-red);
+            padding: 0.75rem 1rem;
+            border-radius: 6px;
+            font-family: var(--font-mono);
+            color: var(--neon-red);
+            margin-bottom: 0.5rem;
+        }
+
+        /* Flex utilities */
+        .flex { display: flex; }
+        .flex-wrap { flex-wrap: wrap; }
+        .items-center { align-items: center; }
+        .justify-between { justify-content: space-between; }
+        .gap-1 { gap: 0.5rem; }
+        .gap-2 { gap: 1rem; }
+        .gap-3 { gap: 1.5rem; }
+        .mb-1 { margin-bottom: 0.5rem; }
+        .mb-2 { margin-bottom: 1rem; }
+        .mb-3 { margin-bottom: 1.5rem; }
+        .mt-2 { margin-top: 1rem; }
+        .mt-3 { margin-top: 1.5rem; }
+        .text-center { text-align: center; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="logo">⚡ Deadlock.AI</div>
+        <div class="nav-links">
+            <button class="active" onclick="showPage('home')">Home</button>
+            <button onclick="showPage('scenario')">Scenario</button>
+            <button onclick="showPage('prediction')">Prediction</button>
+            <button onclick="showPage('detection')">Detection</button>
+            <button onclick="showPage('resolution')">Resolution</button>
+            <button onclick="showPage('about')">About</button>
+        </div>
+    </nav>
+
+    <div class="container">
+        <!-- HOME PAGE -->
+        <div id="page-home" class="page active">
+            <div class="hero">
+                <h1>Deadlock Detection & Prediction</h1>
+                <p>Advanced system analysis using Banker's Algorithm, Wait-For Graph visualization, and heuristic-based risk prediction.</p>
+                <div class="flex gap-2 justify-center">
+                    <button class="btn btn-primary" onclick="showPage('scenario')">
+                        🚀 Try Live Demo
+                    </button>
+                    <button class="btn btn-secondary" onclick="showPage('about')">
+                        📖 Learn More
+                    </button>
+                </div>
+            </div>
+
+            <div class="feature-grid">
+                <div class="card feature-card">
+                    <div class="feature-icon" style="color: var(--neon-amber);">📊</div>
+                    <h3 class="card-title">Prediction</h3>
+                    <p class="card-description">Heuristic-based risk assessment with probability scoring and unsafe chain detection.</p>
+                </div>
+                <div class="card feature-card">
+                    <div class="feature-icon" style="color: var(--neon-red);">🔍</div>
+                    <h3 class="card-title">Detection</h3>
+                    <p class="card-description">Wait-For Graph analysis with DFS cycle detection and Banker's Algorithm safety check.</p>
+                </div>
+                <div class="card feature-card">
+                    <div class="feature-icon" style="color: var(--neon-green);">🛠️</div>
+                    <h3 class="card-title">Resolution</h3>
+                    <p class="card-description">Intelligent recommendations for breaking deadlocks with impact analysis.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- SCENARIO PAGE -->
+        <div id="page-scenario" class="page">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">📝 System Configuration</h2>
+                    <p class="card-description">Configure the number of processes and resources, then fill in the allocation and maximum demand matrices.</p>
+                </div>
+
+                <div class="grid grid-2 mb-3">
+                    <div>
+                        <label>Number of Processes (P)</label>
+                        <input type="number" id="numProcesses" value="3" min="1" max="10" onchange="updateDimensions()">
+                    </div>
+                    <div>
+                        <label>Number of Resources (R)</label>
+                        <input type="number" id="numResources" value="3" min="1" max="10" onchange="updateDimensions()">
+                    </div>
+                </div>
+
+                <div class="grid grid-2">
+                    <!-- Allocation Matrix -->
+                    <div class="card">
+                        <h3 class="card-title mb-2">Allocation Matrix</h3>
+                        <p class="card-description mb-2">Resources currently allocated to each process</p>
+                        <div id="allocationMatrix"></div>
+                    </div>
+
+                    <!-- Maximum Matrix -->
+                    <div class="card">
+                        <h3 class="card-title mb-2">Maximum Demand Matrix</h3>
+                        <p class="card-description mb-2">Maximum resources each process may request</p>
+                        <div id="maxMatrix"></div>
+                    </div>
+                </div>
+
+                <!-- Available Resources -->
+                <div class="card mt-2">
+                    <h3 class="card-title mb-2">Available Resources</h3>
+                    <p class="card-description mb-2">Currently available resources in the system</p>
+                    <div id="availableVector"></div>
+                </div>
+
+                <!-- Presets -->
+                <div class="card mt-2">
+                    <h3 class="card-title mb-2">Quick Presets</h3>
+                    <div class="grid grid-4">
+                        <div class="preset-card" onclick="loadPreset('safe')">
+                            <div style="color: var(--neon-green);">✓ Safe State</div>
+                            <small>No deadlock risk</small>
+                        </div>
+                        <div class="preset-card" onclick="loadPreset('unsafe')">
+                            <div style="color: var(--neon-amber);">⚠ Unsafe State</div>
+                            <small>Potential deadlock</small>
+                        </div>
+                        <div class="preset-card" onclick="loadPreset('deadlock')">
+                            <div style="color: var(--neon-red);">✕ Deadlock</div>
+                            <small>Active deadlock</small>
+                        </div>
+                        <div class="preset-card" onclick="loadPreset('highContention')">
+                            <div style="color: var(--neon-purple);">🔥 High Contention</div>
+                            <small>Resource competition</small>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex gap-2 mt-3">
+                    <button class="btn btn-primary" onclick="runAnalysis()">
+                        ▶ Run Analysis
+                    </button>
+                    <button class="btn btn-secondary" onclick="resetScenario()">
+                        ↺ Reset
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- PREDICTION PAGE -->
+        <div id="page-prediction" class="page">
+            <div class="card">
+                <div class="card-header flex justify-between items-center">
+                    <div>
+                        <h2 class="card-title">📊 Deadlock Prediction</h2>
+                        <p class="card-description">Heuristic-based probability assessment</p>
+                    </div>
+                    <button class="btn btn-primary" onclick="runPrediction()">
+                        ▶ Run Prediction
+                    </button>
+                </div>
+
+                <div id="predictionResults">
+                    <div class="text-center" style="padding: 3rem; color: var(--text-muted);">
+                        Click "Run Prediction" to analyze deadlock probability
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- DETECTION PAGE -->
+        <div id="page-detection" class="page">
+            <div class="card">
+                <div class="card-header flex justify-between items-center">
+                    <div>
+                        <h2 class="card-title">🔍 Deadlock Detection</h2>
+                        <p class="card-description">Wait-For Graph analysis and cycle detection</p>
+                    </div>
+                    <button class="btn btn-primary" onclick="runDetection()">
+                        ▶ Run Detection
+                    </button>
+                </div>
+
+                <div id="detectionResults">
+                    <div class="text-center" style="padding: 3rem; color: var(--text-muted);">
+                        Click "Run Detection" to analyze the system
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- RESOLUTION PAGE -->
+        <div id="page-resolution" class="page">
+            <div class="card">
+                <div class="card-header flex justify-between items-center">
+                    <div>
+                        <h2 class="card-title">🛠️ Resolution Strategies</h2>
+                        <p class="card-description">Recommended actions to resolve deadlock</p>
+                    </div>
+                    <button class="btn btn-primary" onclick="runResolution()">
+                        ▶ Generate Suggestions
+                    </button>
+                </div>
+
+                <div id="resolutionResults">
+                    <div class="text-center" style="padding: 3rem; color: var(--text-muted);">
+                        Click "Generate Suggestions" to get resolution recommendations
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ABOUT PAGE -->
+        <div id="page-about" class="page">
+            <div class="card">
+                <h2 class="card-title mb-3">📚 How It Works</h2>
+               
+                <div class="card mb-2">
+                    <h3 style="color: var(--neon-blue);">1. Banker's Algorithm</h3>
+                    <p class="mt-2">The Banker's Algorithm determines if a system is in a safe state by simulating resource allocation. It checks if there exists a sequence of process completions where each process can obtain its required resources.</p>
+                    <div class="explanation mt-2">
+                        <strong>Key Concept:</strong> Need Matrix = Maximum - Allocation<br>
+                        A state is <em>safe</em> if a safe sequence exists where all processes can complete.
+                    </div>
+                </div>
+
+                <div class="card mb-2">
+                    <h3 style="color: var(--neon-purple);">2. Wait-For Graph (WFG)</h3>
+                    <p class="mt-2">The Wait-For Graph is a directed graph where nodes represent processes and edges represent wait relationships. Process P<sub>i</sub> has an edge to P<sub>j</sub> if P<sub>i</sub> is waiting for a resource held by P<sub>j</sub>.</p>
+                    <div class="explanation mt-2">
+                        <strong>Cycle Detection:</strong> A cycle in the WFG indicates a deadlock. We use DFS (Depth-First Search) to detect cycles.
+                    </div>
+                </div>
+
+                <div class="card mb-2">
+                    <h3 style="color: var(--neon-amber);">3. Prediction Model</h3>
+                    <p class="mt-2">The prediction model uses a weighted heuristic approach combining multiple risk factors:</p>
+                    <ul class="mt-2" style="margin-left: 1.5rem;">
+                        <li>Resource utilization percentage</li>
+                        <li>Resources near exhaustion</li>
+                        <li>Wait chain length in WFG</li>
+                        <li>Multi-resource request patterns</li>
+                        <li>Banker's algorithm safety state</li>
+                        <li>Existing cycles</li>
+                    </ul>
+                </div>
+
+                <div class="card">
+                    <h3 style="color: var(--neon-green);">4. Resolution Strategies</h3>
+                    <ul class="mt-2" style="margin-left: 1.5rem;">
+                        <li><strong>Rollback:</strong> Revert a process to release resources</li>
+                        <li><strong>Preempt:</strong> Force release of specific resources</li>
+                        <li><strong>Priority Boost:</strong> Let near-complete processes finish first</li>
+                        <li><strong>Throttle:</strong> Block new resource requests temporarily</li>
+                        <li><strong>Kill:</strong> Terminate a process (last resort)</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
